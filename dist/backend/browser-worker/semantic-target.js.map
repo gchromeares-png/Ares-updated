@@ -1,1 +1,0 @@
-{"version":3,"file":"semantic-target.js","sourceRoot":"","sources":["../../../src/browser-worker/semantic-target.ts"],"names":[],"mappings":";;;AAwBA,SAAgB,cAAc,CAAC,MAAmB,EAAE,UAA0B,SAAS;IACrF,OAAO,EAAE,MAAM,EAAE,OAAO,EAAE,CAAC;AAC7B,CAAC;AAFD,wCAEC;AAED,yEAAyE;AACzE,SAAgB,SAAS,CAAC,MAAsB;IAC9C,OAAO,GAAG,MAAM,CAAC,OAAO,IAAI,MAAM,CAAC,MAAM,EAAuB,CAAC;AACnE,CAAC;AAFD,8BAEC"}
