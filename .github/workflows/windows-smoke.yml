@@ -1,0 +1,94 @@
+name: Windows Runtime Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "angular.json"
+      - "tsconfig*.json"
+      - "src/**"
+      - "python/**"
+      - "requirements-seleniumbase-cdp.txt"
+      - ".github/workflows/windows-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Python syntax
+        shell: pwsh
+        run: python -m compileall -q python
+
+      - name: Install Node dependencies
+        shell: pwsh
+        run: npm ci --no-audit --no-fund
+
+      - name: Install browser runtime dependencies
+        shell: pwsh
+        run: npm run browser:install
+
+      - name: Rebuild native modules for Electron
+        shell: pwsh
+        run: npm run native:electron
+
+      - name: Build backend and UI
+        shell: pwsh
+        run: npm run build
+
+      - name: Browser worker process smoke
+        shell: pwsh
+        run: |
+          $stdout = Join-Path $env:RUNNER_TEMP "ares-worker.out.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "ares-worker.err.log"
+          $proc = Start-Process -FilePath "node.exe" -ArgumentList "dist/backend/browser-worker/worker.js" -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru -NoNewWindow
+          Start-Sleep -Seconds 5
+          if ($proc.HasExited) {
+            Write-Host "Browser worker exited unexpectedly with code $($proc.ExitCode)."
+            if (Test-Path $stdout) { Get-Content $stdout }
+            if (Test-Path $stderr) { Get-Content $stderr }
+            exit 1
+          }
+          Write-Host "Browser worker stayed alive for smoke window."
+          taskkill /PID $proc.Id /T /F | Out-Null
+
+      - name: Electron application startup smoke
+        shell: pwsh
+        run: |
+          $electron = Join-Path $PWD "node_modules/electron/dist/electron.exe"
+          if (!(Test-Path $electron)) { throw "Electron executable not found: $electron" }
+          $stdout = Join-Path $env:RUNNER_TEMP "ares-electron.out.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "ares-electron.err.log"
+          $proc = Start-Process -FilePath $electron -ArgumentList "." -WorkingDirectory $PWD -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+          Start-Sleep -Seconds 15
+          if ($proc.HasExited) {
+            Write-Host "Electron exited unexpectedly with code $($proc.ExitCode)."
+            if (Test-Path $stdout) { Get-Content $stdout }
+            if (Test-Path $stderr) { Get-Content $stderr }
+            exit 1
+          }
+          Write-Host "Electron stayed alive for 15 seconds after backend/SQLite initialization."
+          if (Test-Path $stdout) { Get-Content $stdout }
+          if (Test-Path $stderr) { Get-Content $stderr }
+          taskkill /PID $proc.Id /T /F | Out-Null
