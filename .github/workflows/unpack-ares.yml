@@ -1,0 +1,88 @@
+name: Unpack ARES source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/unpack-ares.yml"
+      - "Ares updated.zip"
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Unpack source without node_modules
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          import zipfile
+
+          repo = Path.cwd().resolve()
+          archive = repo / "Ares updated.zip"
+          temp = repo / ".ares-unpack-tmp"
+          if temp.exists():
+              shutil.rmtree(temp)
+          temp.mkdir()
+
+          with zipfile.ZipFile(archive) as zf:
+              for member in zf.infolist():
+                  parts = Path(member.filename).parts
+                  if not parts or "node_modules" in parts or ".git" in parts or "__MACOSX" in parts:
+                      continue
+                  target = (temp / Path(*parts)).resolve()
+                  if temp not in target.parents and target != temp:
+                      raise RuntimeError(f"Unsafe ZIP member: {member.filename}")
+                  if member.is_dir():
+                      target.mkdir(parents=True, exist_ok=True)
+                      continue
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  with zf.open(member) as src, target.open("wb") as dst:
+                      shutil.copyfileobj(src, dst)
+
+          entries = [p for p in temp.iterdir() if p.name != "__MACOSX"]
+          source_root = entries[0] if len(entries) == 1 and entries[0].is_dir() else temp
+
+          copied = 0
+          for src in source_root.rglob("*"):
+              rel = src.relative_to(source_root)
+              if not rel.parts:
+                  continue
+              if "node_modules" in rel.parts or ".git" in rel.parts or "__MACOSX" in rel.parts:
+                  continue
+              if rel.as_posix() == ".github/workflows/unpack-ares.yml":
+                  continue
+              dst = repo / rel
+              if src.is_dir():
+                  dst.mkdir(parents=True, exist_ok=True)
+                  continue
+              if src.stat().st_size > 95 * 1024 * 1024:
+                  print(f"Skipping >95 MiB file: {rel}")
+                  continue
+              dst.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copy2(src, dst)
+              copied += 1
+
+          shutil.rmtree(temp)
+          print(f"Copied {copied} files into repository root (node_modules excluded).")
+          PY
+
+      - name: Commit unpacked source
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing new to commit."
+            exit 0
+          fi
+          git commit -m "chore: unpack ARES source"
+          git push origin HEAD:main
