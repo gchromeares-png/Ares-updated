@@ -1,0 +1,30 @@
+name: Cleanup imported build artifacts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/cleanup-import.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Remove generated build artifacts from repository
+        shell: bash
+        run: |
+          git rm -r --ignore-unmatch .angular dist
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --cached --quiet; then
+            echo "No generated artifacts tracked."
+            exit 0
+          fi
+          git commit -m "chore: remove generated build artifacts"
+          git push origin HEAD:main
