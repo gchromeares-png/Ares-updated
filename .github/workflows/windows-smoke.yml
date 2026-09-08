@@ -92,3 +92,5 @@ jobs:
           if (Test-Path $stdout) { Get-Content $stdout }
           if (Test-Path $stderr) { Get-Content $stderr }
           taskkill /PID $proc.Id /T /F | Out-Null
+
+# Clean-tree rerun marker: 2026-09-08
